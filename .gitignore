@@ -1,0 +1,16 @@
+# Node
+node_modules/
+npm-debug.log
+
+# Env
+.env
+
+# Expo
+.expo/
+web-build/
+
+# OS junk
+.DS_Store
+
+# IDE
+.vscode/
