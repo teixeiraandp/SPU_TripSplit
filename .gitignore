@@ -14,3 +14,4 @@ web-build/
 
 # IDE
 .vscode/
+.ebextensions/
