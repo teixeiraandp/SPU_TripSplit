@@ -17,15 +17,85 @@ model User {
   memberships   TripMember[]
   expenses      Expense[]      @relation("ExpensePaidBy")
   expenseSplits ExpenseSplit[]
+
+  // Friends relationships (mutual via Friend join table)
+  friends   Friend[] @relation("UserFriends")
+  friendsOf Friend[] @relation("UserFriendsOf")
+
+  // Item assignment rows (who is assigned to what receipt item)
+  itemAssignments ExpenseItemAssignment[]
+
+  // Trip Invites
+  sentTripInvites     TripInvite[] @relation("InviteSender")
+  receivedTripInvites TripInvite[] @relation("InviteReceiver")
+
+  // Friend Invites
+  sentFriendInvites     FriendInvite[] @relation("FriendInviteSender")
+  receivedFriendInvites FriendInvite[] @relation("FriendInviteReceiver")
+
+  // Payments (settlements)
+  paymentsSent     Payment[] @relation("PaymentsFrom")
+  paymentsReceived Payment[] @relation("PaymentsTo")
+}
+
+model Friend {
+  id        String   @id @default(cuid())
+  userId    String
+  friendId  String
+  createdAt DateTime @default(now())
+
+  user   User @relation("UserFriends", fields: [userId], references: [id])
+  friend User @relation("UserFriendsOf", fields: [friendId], references: [id])
+
+  @@unique([userId, friendId])
+  @@index([userId])
+}
+
+model FriendInvite {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  sender   User @relation("FriendInviteSender", fields: [senderId], references: [id])
+  receiver User @relation("FriendInviteReceiver", fields: [receiverId], references: [id])
+
+  @@unique([senderId, receiverId])
+  @@index([receiverId])
+}
+
+model TripInvite {
+  id         String   @id @default(cuid())
+  tripId     String
+  inviterId  String
+  inviteeId  String
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  trip    Trip @relation(fields: [tripId], references: [id])
+  inviter User @relation("InviteSender", fields: [inviterId], references: [id])
+  invitee User @relation("InviteReceiver", fields: [inviteeId], references: [id])
+
+  @@unique([tripId, inviteeId])
+  @@index([inviteeId])
 }
 
 model Trip {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   name      String
-  createdAt DateTime @default(now())
+  location  String?
+  startDate DateTime?
+  endDate   DateTime?
+  status    String    @default("planning") // planning, active, completed
+  createdAt DateTime  @default(now())
 
   members  TripMember[]
   expenses Expense[]
+  invites  TripInvite[]
+  payments Payment[]
 }
 
 model TripMember {
@@ -45,13 +115,41 @@ model Expense {
   tripId    String
   paidById  String
   title     String
-  amount    Decimal
+
+  amount    Decimal  @default(0)
+  subtotal  Decimal  @default(0)
+  tax       Decimal  @default(0)
+  tip       Decimal  @default(0)
+  total     Decimal  @default(0)
+
   createdAt DateTime @default(now())
 
   trip   Trip @relation(fields: [tripId], references: [id])
   paidBy User @relation("ExpensePaidBy", fields: [paidById], references: [id])
 
   splits ExpenseSplit[]
+  items  ExpenseItem[]
+}
+
+model ExpenseItem {
+  id        String   @id @default(cuid())
+  expenseId String
+  name      String
+  price     Decimal
+
+  expense   Expense @relation(fields: [expenseId], references: [id])
+  assignees ExpenseItemAssignment[]
+}
+
+model ExpenseItemAssignment {
+  id     String @id @default(cuid())
+  itemId String
+  userId String
+
+  item ExpenseItem @relation(fields: [itemId], references: [id])
+  user User        @relation(fields: [userId], references: [id])
+
+  @@unique([itemId, userId])
 }
 
 model ExpenseSplit {
@@ -64,4 +162,25 @@ model ExpenseSplit {
   user    User    @relation(fields: [userId], references: [id])
 
   @@unique([expenseId, userId])
+}
+
+model Payment {
+  id          String   @id @default(cuid())
+  tripId      String
+  fromUserId  String
+  toUserId    String
+  amount      Decimal  @db.Decimal(10, 2)
+  method      String?  // "venmo" | "zelle" | "cash" | "other"
+  status      String   @default("pending") // "pending" | "confirmed" | "declined"
+  declineNote String?  // optional reason if declined
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  trip     Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  fromUser User @relation("PaymentsFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser   User @relation("PaymentsTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+  @@index([fromUserId])
+  @@index([toUserId])
 }
