@@ -594,7 +594,7 @@ export default function NewExpenseScreen() {
 
               <Text style={styles.label}>
                 {splitType === 'even' ? "Who is splitting this?" : "Enter each person's share"}
-                </Text>
+              </Text>
 
               {memberSplits.length === 0 ? (
                 <View style={styles.noMembersCard}>
@@ -669,7 +669,7 @@ export default function NewExpenseScreen() {
                     <Text style={styles.itemNumber}>Item {idx + 1}</Text>
                     {items.length > 1 && (
                       <Pressable onPress={() => removeItemRow(it.id)} style={styles.itemRemoveBtn}>
-                        <Text style={styles.itemRemoveText}>✕</Text>
+                        <Text style={styles.itemRemoveText}>×</Text>
                       </Pressable>
                     )}
                   </View>
@@ -742,9 +742,22 @@ export default function NewExpenseScreen() {
 
               <View style={styles.taxTipRow}>
                 <View style={styles.taxTipField}>
-                  <Text style={styles.miniLabel}>Tip</Text>
+                  <Text style={styles.miniLabel}>Tax</Text>
+                  <View style={styles.taxTipInputContainer}>
+                    <Text style={styles.taxTipSymbol}>$</Text>
+                    <TextInput
+                      style={styles.taxTipInput}
+                      placeholder="0.00"
+                      placeholderTextColor={Colors.dark.textSecondary}
+                      value={tax}
+                      onChangeText={setTax}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
 
-                  {/* input first */}
+                <View style={styles.taxTipField}>
+                  <Text style={styles.miniLabel}>Tip</Text>
                   <View style={styles.taxTipInputContainer}>
                     <Text style={styles.taxTipSymbol}>{tipType === 'percent' ? '%' : '$'}</Text>
                     <TextInput
@@ -757,7 +770,7 @@ export default function NewExpenseScreen() {
                     />
                   </View>
 
-                  {/* small pill toggle under the box */}
+                  {/* Tip type toggle pills underneath */}
                   <View style={styles.tipTypeTogglePillRow}>
                     <Pressable
                       style={[styles.tipTypePill, tipType === 'percent' && styles.tipTypePillActive]}
@@ -776,35 +789,6 @@ export default function NewExpenseScreen() {
                         $
                       </Text>
                     </Pressable>
-                  </View>
-                </View>
-
-                <View style={styles.taxTipField}>
-                  <Text style={styles.miniLabel}>Tip</Text>
-                  <View style={styles.tipTypeToggle}>
-                    <Pressable
-                      style={[styles.tipTypeBtn, tipType === 'percent' && styles.tipTypeBtnActive]}
-                      onPress={() => setTipType('percent')}
-                    >
-                      <Text style={[styles.tipTypeText, tipType === 'percent' && styles.tipTypeTextActive]}>%</Text>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.tipTypeBtn, tipType === 'amount' && styles.tipTypeBtnActive]}
-                      onPress={() => setTipType('amount')}
-                    >
-                      <Text style={[styles.tipTypeText, tipType === 'amount' && styles.tipTypeTextActive]}>$</Text>
-                    </Pressable>
-                  </View>
-                  <View style={styles.taxTipInputContainer}>
-                    <Text style={styles.taxTipSymbol}>{tipType === 'percent' ? '%' : '$'}</Text>
-                    <TextInput
-                      style={styles.taxTipInput}
-                      placeholder={tipType === 'percent' ? '20' : '0.00'}
-                      placeholderTextColor={Colors.dark.textSecondary}
-                      value={tipValue}
-                      onChangeText={setTipValue}
-                      keyboardType="decimal-pad"
-                    />
                   </View>
                 </View>
               </View>
@@ -1414,6 +1398,33 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   tipTypeTextActive: {
+    color: '#fff',
+  },
+
+  // Pill-style tip type toggle (underneath input)
+  tipTypeTogglePillRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 8,
+  },
+  tipTypePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    backgroundColor: Colors.dark.cardSecondary,
+  },
+  tipTypePillActive: {
+    backgroundColor: Colors.dark.tint,
+    borderColor: Colors.dark.tint,
+  },
+  tipTypePillText: {
+    color: Colors.dark.textSecondary,
+    fontSize: FontSizes.xs,
+    fontWeight: '600',
+  },
+  tipTypePillTextActive: {
     color: '#fff',
   },
 
