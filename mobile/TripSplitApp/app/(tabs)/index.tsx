@@ -113,8 +113,14 @@ export default function TripsScreen() {
   }, [filters]);
 
   const handleTripPress = (tripId: string) => {
+    console.log("Pressed tripId:", tripId);
+    router.push(`/trip/${tripId}`);
+  }; //todo for debugging
+  /* it was:
+  const handleTripPress = (tripId: string) => {
     router.push(`/trip/${tripId}`);
   };
+  */
 
   const handleNewTrip = () => {
     router.push('/new-trip');

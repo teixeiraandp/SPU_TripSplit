@@ -137,7 +137,7 @@ export type CreateTripData = {
   location?: string;
   startDate?: string;
   endDate?: string;
-  status?: 'planning' | 'active' | 'completed';
+  status?: 'planning' | 'active' | 'completed' | 'cancelled';
 };
 
 export async function createTrip(data: CreateTripData | string): Promise<Trip> {
@@ -153,8 +153,8 @@ export type UpdateTripData = {
   name?: string;
   location?: string | null;
   startDate?: string | null;
-  endDate?: string | null;
-  status?: 'planning' | 'active' | 'completed';
+  endDate?: string  | null;
+  status?: 'planning' | 'active' | 'completed' | 'cancelled';
 };
 
 export async function updateTrip(tripId: string, data: UpdateTripData): Promise<Trip> {

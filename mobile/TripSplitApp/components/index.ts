@@ -9,7 +9,7 @@ export interface Trip {
   id: string;
   name: string;
   dates: string;
-  status: 'Planned' | 'In Progress' | 'Settling Up' | 'Completed';
+  status: 'Planned' | 'In Progress' | 'Settling Up' | 'Completed' | 'Cancelled';
   people: string[];
   expenses: Expense[];
   createdAt?: Date;

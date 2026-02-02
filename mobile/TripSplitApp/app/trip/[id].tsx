@@ -24,6 +24,10 @@ type PaymentMethod = 'venmo' | 'zelle' | 'cash' | 'other';
 
 export default function TripDetailScreen() {
   const { id } = useLocalSearchParams();
+  const tripId = Array.isArray(id) ? id[0] : id;
+  console.log("Route param id:", id); //todo
+  console.log("Route param id raw:", id); //todo
+  console.log("Route param tripId:", tripId); //todo
   const { user } = useAuth();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [balancesData, setBalancesData] = useState<TripBalances | null>(null);
@@ -44,23 +48,40 @@ export default function TripDetailScreen() {
   const [respondingTo, setRespondingTo] = useState<string | null>(null);
 
   const loadTrip = async () => {
-    if (typeof id === 'string') {
+    if (typeof tripId !== 'string' || !tripId) {
+      console.log("No valid tripId:", tripId);
+      setTrip(null);
+      setLoading(false);
+      return;
+    }
+  
+    try {
+      setLoading(true);
+      console.log("Loading trip:", tripId);
+  
       const [tripData, balances] = await Promise.all([
-        fetchTrip(id),
-        fetchTripBalances(id),
+        fetchTrip(tripId),
+        fetchTripBalances(tripId),
       ]);
+  
+      console.log("Trip loaded ok:", tripData?.id);
       setTrip(tripData);
       setBalancesData(balances);
-
+  
       try {
         const f = await fetchFriends();
         setFriends(f);
       } catch {
         setFriends([]);
       }
+    } catch (err) {
+      console.error("loadTrip failed for id:", tripId, err);
+      setTrip(null);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
+  
 
   useFocusEffect(
     useCallback(() => {
@@ -97,7 +118,7 @@ export default function TripDetailScreen() {
     }
     setAddingMember(true);
     try {
-      await addTripMember(id as string, usernameToAdd);
+      await addTripMember(tripId as string, usernameToAdd);
       Alert.alert('Success', `Added ${usernameToAdd} to the trip!`);
       setNewMemberUsername('');
       setSearchResults([]);
@@ -126,7 +147,7 @@ export default function TripDetailScreen() {
     }
     setSubmittingPayment(true);
     try {
-      await createPayment(id as string, {
+      await createPayment(tripId as string, {
         toUserId: paymentTo.userId,
         amount,
         method: paymentMethod,
@@ -207,10 +228,27 @@ export default function TripDetailScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Pressable style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backButtonText}>← Trips</Text>
-          </Pressable>
+          <View style={styles.headerTopRow}>
+            <Pressable style={styles.backButton} onPress={() => router.back()}>
+              <Text style={styles.backButtonText}>← Trips</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.editButton}
+              onPress={() =>
+                router.push({
+                  pathname: '/trip/[id]/edit',
+                  params: { id: String(id) },
+                })
+              }
+            >
+              <Text style={styles.editButtonText}>Edit</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.title}>Trip</Text> //todo
         </View>
+
         <Text style={styles.errorText}>Trip not found</Text>
       </SafeAreaView>
     );
@@ -225,11 +263,25 @@ export default function TripDetailScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>← Trips</Text>
-        </Pressable>
-        <Text style={styles.title}>{trip.name}</Text>
+        <View style={styles.headerTopRow}>
+          <Pressable style={styles.backButton} onPress={() => router.back()}>
+            <Text style={styles.backButtonText}>← Trips</Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.editButton}
+            onPress={() => {
+              if (typeof tripId !== "string" || !tripId) return;
+              router.push(`/trip/${tripId}/edit`);
+            }}
+          >
+            <Text style={styles.editButtonText}>Edit</Text>
+          </Pressable>
+
+        </View>
+        <Text style={styles.title}>Trip</Text>
       </View>
+
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.chipRow}>
@@ -457,6 +509,7 @@ export default function TripDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.dark.background },
   header: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: Spacing.md },
+  headerTopRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',},
   backButton: { paddingVertical: 5, paddingHorizontal: 9, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.dark.border, backgroundColor: Colors.dark.cardSecondary, alignSelf: 'flex-start', marginBottom: Spacing.sm },
   backButtonText: { fontSize: FontSizes.md, color: Colors.dark.text },
   title: { fontSize: FontSizes.xl, fontWeight: '600', color: Colors.dark.text },
@@ -484,6 +537,8 @@ const styles = StyleSheet.create({
   addBtn: { backgroundColor: Colors.dark.tint, borderRadius: BorderRadius.sm, paddingHorizontal: Spacing.md, justifyContent: 'center' },
   addBtnDisabled: { opacity: 0.6 },
   addBtnText: { color: '#fff', fontWeight: '600' },
+  editButton: {paddingVertical: 5, paddingHorizontal: 10, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.dark.border, backgroundColor: Colors.dark.cardSecondary,},
+  editButtonText: {fontSize: FontSizes.md, color: Colors.dark.tint, fontWeight: '600',},
   searchResultsContainer: { marginTop: Spacing.sm },
   searchResultItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.dark.background, borderRadius: BorderRadius.sm, padding: Spacing.sm, marginBottom: Spacing.xs, borderWidth: 1, borderColor: Colors.dark.border },
   searchResultAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.dark.tint, alignItems: 'center', justifyContent: 'center', marginRight: Spacing.sm },

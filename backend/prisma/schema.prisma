@@ -89,7 +89,7 @@ model Trip {
   location  String?
   startDate DateTime?
   endDate   DateTime?
-  status    String    @default("planning") // planning, active, completed
+  status    String    @default("planning") // planning, active, completed, cancelled
   createdAt DateTime  @default(now())
 
   members  TripMember[]

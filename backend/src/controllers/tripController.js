@@ -7,7 +7,7 @@ const createTripSchema = z.object({
   location: z.string().optional(),
   startDate: z.string().optional(), // ISO date string
   endDate: z.string().optional(),
-  status: z.enum(["planning", "active", "completed"]).optional(),
+  status: z.enum(["planning", "active", "completed", "cancelled"]).optional(),
 });
 
 export async function createTrip(req, res) {
@@ -52,7 +52,7 @@ const updateTripSchema = z.object({
   location: z.string().nullable().optional(),
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
-  status: z.enum(["planning", "active", "completed"]).optional(),
+  status: z.enum(["planning", "active", "completed", "cancelled"]).optional(),
 });
 
 export async function updateTrip(req, res) {
@@ -82,6 +82,11 @@ export async function updateTrip(req, res) {
       data.endDate = updates.endDate ? new Date(updates.endDate) : null;
     }
 
+    // only the owner can cancel the trip
+    if (updates.status === "cancelled" && membership.role !== "owner") {
+      return res.status(403).json({ error: "Only the owner can cancel the trip" });
+    }
+  
     const trip = await prisma.trip.update({
       where: { id: tripId },
       data,
@@ -145,6 +150,7 @@ function calculateBalancesWithPayments(members, expenses, payments) {
   }
 
   // Round balances
+  //todo penny issue
   for (const odlUserId in balances) {
     balances[odlUserId] = Math.round(balances[odlUserId] * 100) / 100;
   }

@@ -55,6 +55,12 @@ function getStatusColor(status: string): { bg: string; text: string; border: str
         text: '#bae6fd',
         border: 'rgba(56, 189, 248, 0.6)',
       };
+    case 'cancelled':
+      return {
+        bg: 'rgba(239, 68, 68, 0.1)',
+        text: '#fca5a5',
+        border: 'rgba(239, 68, 68, 0.55)',
+      }
   }
 }
 

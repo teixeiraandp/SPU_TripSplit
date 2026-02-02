@@ -1,4 +1,4 @@
-import { Router } from "express";
+ import { Router } from "express";
 import { requireAuth } from "../middleware/authMiddleware.js";
 import { listInvites, acceptInvite, declineInvite } from "../controllers/inviteController.js";
 

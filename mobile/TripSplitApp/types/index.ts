@@ -11,7 +11,7 @@ export interface Trip {
   location?: string | null;
   startDate?: string | null;
   endDate?: string | null;
-  status: 'planning' | 'active' | 'completed';
+  status: 'planning' | 'active' | 'completed' | 'cancelled';
   people: string[];
   expenses: Expense[];
   createdAt?: Date;
@@ -87,7 +87,7 @@ export interface Friend {
 }
 
 export interface TripFilters {
-  status: 'all' | 'planning' | 'active' | 'completed';
+  status: 'all' | 'planning' | 'active' | 'completed' | 'cancelled';
   dateRange: 'all' | 'upcoming' | 'past' | 'current';
   hasBalance: 'all' | 'owed' | 'owing' | 'settled';
 }
