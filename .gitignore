@@ -17,3 +17,4 @@ web-build/
 .ebextensions/
 .idea/
 backend/.env.tests
+backend/npm
