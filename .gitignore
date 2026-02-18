@@ -4,6 +4,7 @@ npm-debug.log
 
 # Env
 .env
+.env.*
 
 # Expo
 .expo/
