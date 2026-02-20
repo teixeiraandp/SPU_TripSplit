@@ -16,6 +16,7 @@ export default function OcrScreen() {
 
   const runOcr = async (uri: string) => {
     setOcrText("Running OCR...");
+
     try {
       const blocks: any[] = await MlkitOcr.detectFromUri(uri);
       console.log("OCR blocks:", blocks?.length);
@@ -60,7 +61,7 @@ export default function OcrScreen() {
           current = { y: p.top, h: p.height || 24, parts: [{ left: p.left, text: p.text }] };
         }
       }
-
+      // The final line to add
       if (current) {
         current.parts.sort((x, y) => x.left - y.left);
         lines.push(current.parts.map(k => k.text).join(" "));
@@ -71,8 +72,8 @@ export default function OcrScreen() {
     } catch (e: any) {
       setOcrText("OCR failed: " + (e?.message ?? String(e)));
     }
+    
   };
-
   const takePhoto = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (perm.status !== "granted") {
@@ -139,4 +140,6 @@ const styles = StyleSheet.create({
   image: { width: "100%", height: 240, marginTop: 10, borderRadius: 12 },
   scroll: { marginTop: 10, borderWidth: 1, borderRadius: 10, padding: 10, maxHeight: 320 },
   text: { fontSize: 14, lineHeight: 18 },
+
+  
 });

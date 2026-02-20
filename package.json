@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "pg": "^8.17.2",
+    "react-native-mlkit-ocr": "^0.3.0"
+  }
+}

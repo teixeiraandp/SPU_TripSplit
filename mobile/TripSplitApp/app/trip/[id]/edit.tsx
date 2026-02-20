@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+//import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Spacing, FontSizes, BorderRadius } from '@/constants/theme';
 import { fetchTrip, updateTrip } from '@/utils/api';
 

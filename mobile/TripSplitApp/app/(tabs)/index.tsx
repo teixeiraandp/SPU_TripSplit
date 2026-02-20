@@ -1,7 +1,20 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, Pressable, SafeAreaView, ActivityIndicator, Modal } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TextInput,
+  Pressable,
+  ActivityIndicator,
+  Modal,
+  StatusBar,
+} from 'react-native';
+
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+
 import { TripCard } from '@/components/TripCard';
 import { fetchTrips } from '@/utils/api';
 import { useAuth } from '@/utils/AuthContext';
@@ -15,7 +28,9 @@ const defaultFilters: TripFilters = {
 };
 
 export default function TripsScreen() {
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
+
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,34 +65,35 @@ export default function TripsScreen() {
     // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      result = result.filter(trip =>
-        trip.name.toLowerCase().includes(query) ||
-        (trip.location && trip.location.toLowerCase().includes(query)) ||
-        trip.people.some(p => p.toLowerCase().includes(query))
+      result = result.filter(
+        (trip) =>
+          trip.name.toLowerCase().includes(query) ||
+          (trip.location && trip.location.toLowerCase().includes(query)) ||
+          (trip.people || []).some((p) => p.toLowerCase().includes(query))
       );
     }
 
     // Status filter
     if (filters.status !== 'all') {
-      result = result.filter(trip => trip.status === filters.status);
+      result = result.filter((trip) => trip.status === filters.status);
     }
 
     // Date range filter
     if (filters.dateRange !== 'all') {
       const now = new Date();
-      result = result.filter(trip => {
-        if (!trip.startDate && !trip.endDate) return filters.dateRange === 'all';
+      result = result.filter((trip) => {
+        if (!trip.startDate && !trip.endDate) return true;
 
         const start = trip.startDate ? new Date(trip.startDate) : null;
         const end = trip.endDate ? new Date(trip.endDate) : null;
 
         switch (filters.dateRange) {
           case 'upcoming':
-            return start && start > now;
+            return !!start && start > now;
           case 'current':
-            return (start && start <= now) && (!end || end >= now);
+            return (!!start && start <= now) && (!end || end >= now);
           case 'past':
-            return end && end < now;
+            return !!end && end < now;
           default:
             return true;
         }
@@ -86,7 +102,7 @@ export default function TripsScreen() {
 
     // Balance filter
     if (filters.hasBalance !== 'all') {
-      result = result.filter(trip => {
+      result = result.filter((trip) => {
         const balance = trip.userBalance || 0;
         switch (filters.hasBalance) {
           case 'owed':
@@ -124,10 +140,27 @@ export default function TripsScreen() {
     setFilters(defaultFilters);
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
+        <View style={{ height: insets.top, backgroundColor: Colors.dark.background }} />
+        <StatusBar barStyle="light-content" backgroundColor={Colors.dark.background} translucent={false} />
+        <ActivityIndicator size="large" color={Colors.dark.tint} style={{ marginTop: 50 }} />
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
+      {/* ANDROID TOP FIX: reserve space for the notch/status bar */}
+      <View style={{ height: insets.top, backgroundColor: Colors.dark.background }} />
+
+      <StatusBar barStyle="light-content" backgroundColor={Colors.dark.background} translucent={false} />
+
       <View style={styles.header}>
-        <Text style={styles.title}>TripSplit</Text>
+        <Text style={styles.title} numberOfLines={1}>
+          TripSplit
+        </Text>
         <Pressable style={styles.avatar} onPress={() => router.push('/profile')}>
           <Text style={styles.avatarText}>{initials}</Text>
         </Pressable>
@@ -159,49 +192,43 @@ export default function TripsScreen() {
           </Pressable>
         </View>
 
-        {loading ? (
-          <ActivityIndicator size="large" color={Colors.dark.tint} style={{ marginTop: 50 }} />
-        ) : (
-          <FlatList
-            data={filteredTrips}
-            renderItem={({ item }) => (
-              <TripCard
-                trip={item}
-                onPress={() => handleTripPress(item.id)}
-              />
-            )}
-            keyExtractor={item => item.id}
-            contentContainerStyle={styles.list}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyIcon}>🗺</Text>
-                <Text style={styles.emptyTitle}>No trips found</Text>
-                <Text style={styles.emptySubtitle}>
-                  {searchQuery || activeFilterCount > 0
-                    ? 'Try adjusting your search or filters'
-                    : 'Create your first trip to get started'}
-                </Text>
-                {activeFilterCount > 0 && (
-                  <Pressable style={styles.clearFiltersButton} onPress={clearFilters}>
-                    <Text style={styles.clearFiltersText}>Clear filters</Text>
-                  </Pressable>
-                )}
-              </View>
-            }
-          />
-        )}
+        <FlatList
+          data={filteredTrips}
+          renderItem={({ item }) => <TripCard trip={item} onPress={() => handleTripPress(item.id)} />}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[
+            styles.list,
+            { paddingBottom: Math.max(Spacing.xl, insets.bottom + Spacing.lg) },
+          ]}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>🗺</Text>
+              <Text style={styles.emptyTitle}>No trips found</Text>
+              <Text style={styles.emptySubtitle}>
+                {searchQuery || activeFilterCount > 0
+                  ? 'Try adjusting your search or filters'
+                  : 'Create your first trip to get started'}
+              </Text>
+              {activeFilterCount > 0 && (
+                <Pressable style={styles.clearFiltersButton} onPress={clearFilters}>
+                  <Text style={styles.clearFiltersText}>Clear filters</Text>
+                </Pressable>
+              )}
+            </View>
+          }
+        />
       </View>
 
       {/* Filter Modal */}
       <Modal
         visible={showFilterModal}
         animationType="slide"
-        transparent={true}
+        transparent
         onRequestClose={() => setShowFilterModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { paddingBottom: Math.max(40, insets.bottom + 20) }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Filter Trips</Text>
               <Pressable onPress={() => setShowFilterModal(false)}>
@@ -237,7 +264,12 @@ export default function TripsScreen() {
                     style={[styles.filterChip, filters.dateRange === option && styles.filterChipActive]}
                     onPress={() => setFilters({ ...filters, dateRange: option })}
                   >
-                    <Text style={[styles.filterChipText, filters.dateRange === option && styles.filterChipTextActive]}>
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        filters.dateRange === option && styles.filterChipTextActive,
+                      ]}
+                    >
                       {option === 'all' ? 'All' : option.charAt(0).toUpperCase() + option.slice(1)}
                     </Text>
                   </Pressable>
@@ -255,14 +287,20 @@ export default function TripsScreen() {
                     owed: 'Owed to me',
                     owing: 'I owe',
                     settled: 'Settled',
-                  };
+                  } as const;
+
                   return (
                     <Pressable
                       key={option}
                       style={[styles.filterChip, filters.hasBalance === option && styles.filterChipActive]}
                       onPress={() => setFilters({ ...filters, hasBalance: option })}
                     >
-                      <Text style={[styles.filterChipText, filters.hasBalance === option && styles.filterChipTextActive]}>
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          filters.hasBalance === option && styles.filterChipTextActive,
+                        ]}
+                      >
                         {labels[option]}
                       </Text>
                     </Pressable>
@@ -271,7 +309,6 @@ export default function TripsScreen() {
               </View>
             </View>
 
-            {/* Action Buttons */}
             <View style={styles.modalActions}>
               <Pressable style={styles.clearButton} onPress={clearFilters}>
                 <Text style={styles.clearButtonText}>Clear All</Text>
@@ -288,24 +325,24 @@ export default function TripsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.dark.background,
-  },
+  container: { flex: 1, backgroundColor: Colors.dark.background },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.lg,
+    paddingTop: Spacing.sm,
     paddingBottom: Spacing.sm,
   },
+
   title: {
     fontSize: FontSizes['4xl'],
     fontWeight: '600',
     color: Colors.dark.text,
     letterSpacing: -0.5,
   },
+
   avatar: {
     width: 32,
     height: 32,
@@ -314,22 +351,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
   avatarText: {
     fontSize: FontSizes.lg,
     fontWeight: '600',
     color: Colors.dark.text,
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-  },
+
+  content: { flex: 1, paddingHorizontal: Spacing.lg, paddingTop: Spacing.md },
+
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: Spacing.md,
   },
+
   sectionTitle: {
     fontSize: FontSizes.base,
     fontWeight: '600',
@@ -337,22 +374,22 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.04,
   },
+
   addButton: {
     paddingHorizontal: Spacing.md,
     paddingVertical: 6,
     borderRadius: BorderRadius.full,
     backgroundColor: Colors.dark.tint,
   },
+
   addButtonText: {
     fontSize: FontSizes.base,
     fontWeight: '600',
     color: Colors.dark.text,
   },
-  searchRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
+
+  searchRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.md },
+
   searchInput: {
     flex: 1,
     backgroundColor: Colors.dark.cardSecondary,
@@ -364,6 +401,7 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.base,
     color: Colors.dark.text,
   },
+
   filterButton: {
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
@@ -372,41 +410,26 @@ const styles = StyleSheet.create({
     borderColor: Colors.dark.border,
     backgroundColor: Colors.dark.cardSecondary,
   },
+
   filterButtonActive: {
     borderColor: Colors.dark.tint,
     backgroundColor: 'rgba(56, 189, 248, 0.15)',
   },
-  filterButtonText: {
-    fontSize: FontSizes.base,
-    color: Colors.dark.text,
-  },
-  filterButtonTextActive: {
-    color: Colors.dark.tint,
-    fontWeight: '600',
-  },
-  list: {
-    paddingBottom: Spacing.xl,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: Spacing.xl,
-  },
-  emptyIcon: {
-    fontSize: 32,
-    marginBottom: Spacing.sm,
-  },
-  emptyTitle: {
-    fontSize: FontSizes.lg,
-    fontWeight: '600',
-    color: Colors.dark.text,
-    marginBottom: 4,
-  },
-  emptySubtitle: {
-    fontSize: FontSizes.md,
-    color: Colors.dark.textSecondary,
-    textAlign: 'center',
-  },
+
+  filterButtonText: { fontSize: FontSizes.base, color: Colors.dark.text },
+
+  filterButtonTextActive: { color: Colors.dark.tint, fontWeight: '600' },
+
+  list: { paddingBottom: Spacing.xl },
+
+  emptyState: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: Spacing.xl },
+
+  emptyIcon: { fontSize: 32, marginBottom: Spacing.sm },
+
+  emptyTitle: { fontSize: FontSizes.lg, fontWeight: '600', color: Colors.dark.text, marginBottom: 4 },
+
+  emptySubtitle: { fontSize: FontSizes.md, color: Colors.dark.textSecondary, textAlign: 'center' },
+
   clearFiltersButton: {
     marginTop: Spacing.md,
     paddingHorizontal: Spacing.md,
@@ -414,54 +437,44 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.full,
     backgroundColor: Colors.dark.tint,
   },
-  clearFiltersText: {
-    color: '#fff',
-    fontSize: FontSizes.sm,
-    fontWeight: '600',
-  },
-  // Modal styles
+
+  clearFiltersText: { color: '#fff', fontSize: FontSizes.sm, fontWeight: '600' },
+
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'flex-end',
   },
+
   modalContent: {
     backgroundColor: Colors.dark.background,
     borderTopLeftRadius: BorderRadius.xl,
     borderTopRightRadius: BorderRadius.xl,
     padding: Spacing.lg,
-    paddingBottom: 40,
   },
+
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: Spacing.lg,
   },
-  modalTitle: {
-    fontSize: FontSizes.xl,
-    fontWeight: '700',
-    color: Colors.dark.text,
-  },
-  modalClose: {
-    fontSize: FontSizes.xl,
-    color: Colors.dark.textSecondary,
-    padding: Spacing.sm,
-  },
-  filterSection: {
-    marginBottom: Spacing.lg,
-  },
+
+  modalTitle: { fontSize: FontSizes.xl, fontWeight: '700', color: Colors.dark.text },
+
+  modalClose: { fontSize: FontSizes.xl, color: Colors.dark.textSecondary, padding: Spacing.sm },
+
+  filterSection: { marginBottom: Spacing.lg },
+
   filterLabel: {
     fontSize: FontSizes.base,
     fontWeight: '600',
     color: Colors.dark.textSecondary,
     marginBottom: Spacing.sm,
   },
-  filterOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
+
+  filterOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+
   filterChip: {
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
@@ -470,23 +483,18 @@ const styles = StyleSheet.create({
     borderColor: Colors.dark.border,
     backgroundColor: Colors.dark.cardSecondary,
   },
+
   filterChipActive: {
     borderColor: Colors.dark.tint,
     backgroundColor: 'rgba(56, 189, 248, 0.15)',
   },
-  filterChipText: {
-    fontSize: FontSizes.sm,
-    color: Colors.dark.text,
-  },
-  filterChipTextActive: {
-    color: Colors.dark.tint,
-    fontWeight: '600',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    marginTop: Spacing.md,
-  },
+
+  filterChipText: { fontSize: FontSizes.sm, color: Colors.dark.text },
+
+  filterChipTextActive: { color: Colors.dark.tint, fontWeight: '600' },
+
+  modalActions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.md },
+
   clearButton: {
     flex: 1,
     paddingVertical: Spacing.md,
@@ -495,11 +503,9 @@ const styles = StyleSheet.create({
     borderColor: Colors.dark.border,
     alignItems: 'center',
   },
-  clearButtonText: {
-    fontSize: FontSizes.base,
-    fontWeight: '600',
-    color: Colors.dark.text,
-  },
+
+  clearButtonText: { fontSize: FontSizes.base, fontWeight: '600', color: Colors.dark.text },
+
   applyButton: {
     flex: 1,
     paddingVertical: Spacing.md,
@@ -507,9 +513,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.tint,
     alignItems: 'center',
   },
-  applyButtonText: {
-    fontSize: FontSizes.base,
-    fontWeight: '700',
-    color: '#fff',
-  },
+
+  applyButtonText: { fontSize: FontSizes.base, fontWeight: '700', color: '#fff' },
 });
