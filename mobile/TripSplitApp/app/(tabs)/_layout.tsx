@@ -34,7 +34,7 @@ export default function TabLayout() {
         tabBarInactiveTintColor: Colors[colorScheme ?? 'dark'].tabIconDefault,
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: Colors[colorScheme ?? 'dark'].backgroundTertiary,
+backgroundColor: Colors[colorScheme ?? 'dark'].backgroundSecondary,
           borderTopColor: Colors[colorScheme ?? 'dark'].border,
           borderTopWidth: 1,
           height: 54,

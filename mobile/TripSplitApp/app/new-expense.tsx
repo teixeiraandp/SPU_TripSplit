@@ -14,8 +14,10 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Spacing, FontSizes, BorderRadius } from '@/constants/theme';
-import { createExpense, fetchTrip } from '@/utils/api';
 import { Trip } from '@/types';
+import * as ImagePicker from 'expo-image-picker';
+import MlkitOcr from 'react-native-mlkit-ocr';
+import { createExpense, fetchTrip, submitReceiptOcr } from '@/utils/api';
 
 type Screen = 'choose-method' | 'manual-entry';
 type Mode = 'simple' | 'items';
@@ -114,10 +116,6 @@ export default function NewExpenseScreen() {
   const [tipType, setTipType] = useState<TipType>('percent');
   const [tipValue, setTipValue] = useState('');
 
-  useEffect(() => {
-    loadTripData();
-  }, [tripId]);
-
   const loadTripData = async () => {
     try {
       if (typeof tripId !== 'string') return;
@@ -142,6 +140,7 @@ export default function NewExpenseScreen() {
         }))
       );
 
+      // Default first item assigned to all members (nice UX)
       setItems((prev) => {
         if (tripMembers.length === 0) return prev;
         return prev.map((it, idx) =>
@@ -153,6 +152,122 @@ export default function NewExpenseScreen() {
     } finally {
       setLoadingTrip(false);
     }
+  };
+
+  useEffect(() => {
+    loadTripData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripId]);
+
+  // OCR helpers (single source of truth)
+  const runOcr = async (uri: string) => {
+    const blocks: any[] = await MlkitOcr.detectFromUri(uri);
+
+    const lines: string[] = [];
+    for (const b of blocks ?? []) {
+      if (b?.lines?.length) {
+        for (const ln of b.lines) {
+          const t = (ln?.text ?? '').trim();
+          if (t) lines.push(t);
+        }
+      } else {
+        const t = (b?.text ?? '').trim();
+        if (t) lines.push(t);
+      }
+    }
+
+    return lines.join('\n').trim();
+  };
+
+  const handleReceiptImage = async (uri: string) => {
+    if (typeof tripId !== 'string') {
+      Alert.alert('Error', 'No trip selected.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const ocrText = await runOcr(uri);
+
+      if (!ocrText) {
+        Alert.alert('OCR', 'No text found on the receipt.');
+        return;
+      }
+
+      const parsed = await submitReceiptOcr(tripId, ocrText);
+
+      // Jump to manual entry screen and items mode
+      setScreen('manual-entry');
+      setMode('items');
+
+      // Fill UI based on backend response (optional fields)
+      if (parsed?.title) setTitle(String(parsed.title));
+      if (typeof parsed?.tax === 'number') setTax(String(parsed.tax));
+
+      if (parsed?.tip?.type && typeof parsed?.tip?.value === 'number') {
+        setTipType(parsed.tip.type);
+        setTipValue(String(parsed.tip.value));
+      }
+
+      if (Array.isArray(parsed?.items) && parsed.items.length) {
+        setItems(
+          parsed.items.map((it: any) => ({
+            id: uid(),
+            name: String(it.name ?? ''),
+            price: String(it.price ?? ''),
+            // default assign all members (user can edit)
+            assignedUserIds: members.map((m) => m.userId),
+          }))
+        );
+      }
+
+      Alert.alert('Success', 'Receipt scanned and loaded.');
+    } catch (e: any) {
+      Alert.alert('OCR error', e?.message ?? 'Failed to scan receipt.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onTakePicture = async () => {
+    const camPerm = await ImagePicker.requestCameraPermissionsAsync();
+    if (camPerm.status !== 'granted') {
+      Alert.alert('Permission needed', 'Camera permission is required.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 1,
+      allowsEditing: true,
+    });
+
+    if (result.canceled) return;
+
+    const uri = result.assets[0]?.uri;
+    if (!uri) return;
+
+    await handleReceiptImage(uri);
+  };
+
+  const onUploadPicture = async () => {
+    const libPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (libPerm.status !== 'granted') {
+      Alert.alert('Permission needed', 'Photo library permission is required.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 1,
+      allowsEditing: true,
+    });
+
+    if (result.canceled) return;
+
+    const uri = result.assets[0]?.uri;
+    if (!uri) return;
+
+    await handleReceiptImage(uri);
   };
 
   // SIMPLE MODE helpers
@@ -233,11 +348,11 @@ export default function NewExpenseScreen() {
       let rem = priceCents - base * n;
 
       for (let idx = 0; idx < it.assignedUserIds.length; idx++) {
-        const odlUserId = it.assignedUserIds[idx];
+        const userId = it.assignedUserIds[idx];
         const add = rem > 0 ? 1 : 0;
         rem -= add;
         const shareCents = base + add;
-        subtotalCentsByUser.set(odlUserId, (subtotalCentsByUser.get(odlUserId) || 0) + shareCents);
+        subtotalCentsByUser.set(userId, (subtotalCentsByUser.get(userId) || 0) + shareCents);
       }
     }
 
@@ -246,7 +361,8 @@ export default function NewExpenseScreen() {
 
     const taxNum = Math.max(0, parseFloat(tax) || 0);
     const tipRaw = Math.max(0, parseFloat(tipValue) || 0);
-    const tipDollars = tipType === 'amount' ? tipRaw : subtotal > 0 ? (tipRaw / 100) * subtotal : 0;
+    const tipDollars =
+      tipType === 'amount' ? tipRaw : subtotal > 0 ? (tipRaw / 100) * subtotal : 0;
 
     const taxCents = toCents(taxNum);
     const tipCents = toCents(tipDollars);
@@ -255,8 +371,11 @@ export default function NewExpenseScreen() {
     const tipAlloc = allocateProportionally(subtotalCentsByUser, tipCents);
 
     const owedCentsByUser = new Map<string, number>();
-    for (const [odlUserId, subCents] of subtotalCentsByUser.entries()) {
-      owedCentsByUser.set(odlUserId, subCents + (taxAlloc.get(odlUserId) || 0) + (tipAlloc.get(odlUserId) || 0));
+    for (const [userId, subCents] of subtotalCentsByUser.entries()) {
+      owedCentsByUser.set(
+        userId,
+        subCents + (taxAlloc.get(userId) || 0) + (tipAlloc.get(userId) || 0)
+      );
     }
 
     const totalCents = subtotalCentsTotal + taxCents + tipCents;
@@ -268,7 +387,6 @@ export default function NewExpenseScreen() {
       tip: tipDollars,
       total,
       owedByUser: owedCentsByUser,
-      subtotalCentsByUser,
     };
   }, [items, members, tax, tipType, tipValue]);
 
@@ -438,56 +556,37 @@ export default function NewExpenseScreen() {
           <Text style={styles.methodTitle}>How would you like to add this expense?</Text>
           <Text style={styles.methodSubtitle}>Choose an option below</Text>
 
-          <Pressable
-            style={styles.methodCard}
-            onPress={() => setScreen('manual-entry')}
-          >
+          <Pressable style={styles.methodCard} onPress={() => setScreen('manual-entry')}>
             <View style={styles.methodIconContainer}>
               <Text style={styles.methodIcon}>✏️</Text>
             </View>
             <View style={styles.methodCardContent}>
               <Text style={styles.methodCardTitle}>Input Manually</Text>
-              <Text style={styles.methodCardDesc}>
-                Type in the expense details and split among friends
-              </Text>
+              <Text style={styles.methodCardDesc}>Type in the expense details and split among friends</Text>
             </View>
             <Text style={styles.methodArrow}>→</Text>
           </Pressable>
 
-          <Pressable
-            style={[styles.methodCard, styles.methodCardDisabled]}
-            disabled={true}
-          >
-            <View style={[styles.methodIconContainer, styles.methodIconDisabled]}>
+          <Pressable style={styles.methodCard} onPress={onTakePicture}>
+            <View style={styles.methodIconContainer}>
               <Text style={styles.methodIcon}>📷</Text>
             </View>
             <View style={styles.methodCardContent}>
-              <Text style={[styles.methodCardTitle, styles.methodTextDisabled]}>Take Picture</Text>
-              <Text style={[styles.methodCardDesc, styles.methodTextDisabled]}>
-                Snap a photo of your receipt to auto-fill items
-              </Text>
-              <View style={styles.comingSoonBadge}>
-                <Text style={styles.comingSoonText}>Coming Soon</Text>
-              </View>
+              <Text style={styles.methodCardTitle}>Take Picture</Text>
+              <Text style={styles.methodCardDesc}>Snap a photo of your receipt to auto-fill items</Text>
             </View>
+            <Text style={styles.methodArrow}>→</Text>
           </Pressable>
 
-          <Pressable
-            style={[styles.methodCard, styles.methodCardDisabled]}
-            disabled={true}
-          >
-            <View style={[styles.methodIconContainer, styles.methodIconDisabled]}>
+          <Pressable style={styles.methodCard} onPress={onUploadPicture}>
+            <View style={styles.methodIconContainer}>
               <Text style={styles.methodIcon}>🖼️</Text>
             </View>
             <View style={styles.methodCardContent}>
-              <Text style={[styles.methodCardTitle, styles.methodTextDisabled]}>Upload Picture</Text>
-              <Text style={[styles.methodCardDesc, styles.methodTextDisabled]}>
-                Choose a receipt image from your gallery
-              </Text>
-              <View style={styles.comingSoonBadge}>
-                <Text style={styles.comingSoonText}>Coming Soon</Text>
-              </View>
+              <Text style={styles.methodCardTitle}>Upload Picture</Text>
+              <Text style={styles.methodCardDesc}>Choose a receipt image from your gallery</Text>
             </View>
+            <Text style={styles.methodArrow}>→</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -593,8 +692,8 @@ export default function NewExpenseScreen() {
               </View>
 
               <Text style={styles.label}>
-                {splitType === 'even' ? "Who is splitting this?" : "Enter each person's share"}
-                </Text>
+                {splitType === 'even' ? 'Who is splitting this?' : "Enter each person's share"}
+              </Text>
 
               {memberSplits.length === 0 ? (
                 <View style={styles.noMembersCard}>
@@ -607,10 +706,7 @@ export default function NewExpenseScreen() {
                   {memberSplits.map((member, index) => (
                     <View key={member.userId} style={styles.memberRow}>
                       <Pressable
-                        style={[
-                          styles.memberCheckbox,
-                          member.selected && styles.memberCheckboxSelected,
-                        ]}
+                        style={[styles.memberCheckbox, member.selected && styles.memberCheckboxSelected]}
                         onPress={() => toggleSimpleMember(index)}
                       >
                         {member.selected && <Text style={styles.checkmark}>✓</Text>}
@@ -643,13 +739,24 @@ export default function NewExpenseScreen() {
                   {splitType === 'custom' && amountNum > 0 && (
                     <View style={styles.splitTotalRow}>
                       <Text style={styles.splitTotalLabel}>Total entered</Text>
-                      <Text style={[
-                        styles.splitTotalValue,
-                        Math.abs(memberSplits.filter((m) => m.selected).reduce((sum, m) => sum + (parseFloat(m.share) || 0), 0) - amountNum) < 0.01
-                          ? styles.splitTotalMatch
-                          : styles.splitTotalMismatch
-                      ]}>
-                        ${memberSplits.filter((m) => m.selected).reduce((sum, m) => sum + (parseFloat(m.share) || 0), 0).toFixed(2)} / ${amountNum.toFixed(2)}
+                      <Text
+                        style={[
+                          styles.splitTotalValue,
+                          Math.abs(
+                            memberSplits
+                              .filter((m) => m.selected)
+                              .reduce((sum, m) => sum + (parseFloat(m.share) || 0), 0) - amountNum
+                          ) < 0.01
+                            ? styles.splitTotalMatch
+                            : styles.splitTotalMismatch,
+                        ]}
+                      >
+                        $
+                        {memberSplits
+                          .filter((m) => m.selected)
+                          .reduce((sum, m) => sum + (parseFloat(m.share) || 0), 0)
+                          .toFixed(2)}{' '}
+                        / ${amountNum.toFixed(2)}
                       </Text>
                     </View>
                   )}
@@ -738,63 +845,48 @@ export default function NewExpenseScreen() {
 
               {/* Tax & Tip */}
               <Text style={[styles.label, { marginTop: Spacing.lg }]}>Tax & Tip</Text>
-              <Text style={styles.taxTipHint}>These will be split proportionally based on each person's items</Text>
+              <Text style={styles.taxTipHint}>
+                These will be split proportionally based on each person's items
+              </Text>
 
               <View style={styles.taxTipRow}>
                 <View style={styles.taxTipField}>
-                  <Text style={styles.miniLabel}>Tip</Text>
-
-                  {/* input first */}
+                  <Text style={styles.miniLabel}>Tax</Text>
                   <View style={styles.taxTipInputContainer}>
-                    <Text style={styles.taxTipSymbol}>{tipType === 'percent' ? '%' : '$'}</Text>
+                    <Text style={styles.taxTipSymbol}>$</Text>
                     <TextInput
                       style={styles.taxTipInput}
-                      placeholder={tipType === 'percent' ? '20' : '0.00'}
+                      placeholder="0.00"
                       placeholderTextColor={Colors.dark.textSecondary}
-                      value={tipValue}
-                      onChangeText={setTipValue}
+                      value={tax}
+                      onChangeText={setTax}
                       keyboardType="decimal-pad"
                     />
-                  </View>
-
-                  {/* small pill toggle under the box */}
-                  <View style={styles.tipTypeTogglePillRow}>
-                    <Pressable
-                      style={[styles.tipTypePill, tipType === 'percent' && styles.tipTypePillActive]}
-                      onPress={() => setTipType('percent')}
-                    >
-                      <Text style={[styles.tipTypePillText, tipType === 'percent' && styles.tipTypePillTextActive]}>
-                        %
-                      </Text>
-                    </Pressable>
-
-                    <Pressable
-                      style={[styles.tipTypePill, tipType === 'amount' && styles.tipTypePillActive]}
-                      onPress={() => setTipType('amount')}
-                    >
-                      <Text style={[styles.tipTypePillText, tipType === 'amount' && styles.tipTypePillTextActive]}>
-                        $
-                      </Text>
-                    </Pressable>
                   </View>
                 </View>
 
                 <View style={styles.taxTipField}>
                   <Text style={styles.miniLabel}>Tip</Text>
+
                   <View style={styles.tipTypeToggle}>
                     <Pressable
                       style={[styles.tipTypeBtn, tipType === 'percent' && styles.tipTypeBtnActive]}
                       onPress={() => setTipType('percent')}
                     >
-                      <Text style={[styles.tipTypeText, tipType === 'percent' && styles.tipTypeTextActive]}>%</Text>
+                      <Text style={[styles.tipTypeText, tipType === 'percent' && styles.tipTypeTextActive]}>
+                        %
+                      </Text>
                     </Pressable>
                     <Pressable
                       style={[styles.tipTypeBtn, tipType === 'amount' && styles.tipTypeBtnActive]}
                       onPress={() => setTipType('amount')}
                     >
-                      <Text style={[styles.tipTypeText, tipType === 'amount' && styles.tipTypeTextActive]}>$</Text>
+                      <Text style={[styles.tipTypeText, tipType === 'amount' && styles.tipTypeTextActive]}>
+                        $
+                      </Text>
                     </Pressable>
                   </View>
+
                   <View style={styles.taxTipInputContainer}>
                     <Text style={styles.taxTipSymbol}>{tipType === 'percent' ? '%' : '$'}</Text>
                     <TextInput
@@ -855,11 +947,7 @@ export default function NewExpenseScreen() {
             onPress={handleSubmit}
             disabled={saving}
           >
-            {saving ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.submitButtonText}>Add Expense</Text>
-            )}
+            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Add Expense</Text>}
           </TouchableOpacity>
 
           <View style={{ height: 40 }} />
@@ -922,9 +1010,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.dark.border,
   },
-  methodCardDisabled: {
-    opacity: 0.5,
-  },
   methodIconContainer: {
     width: 50,
     height: 50,
@@ -933,9 +1018,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: Spacing.md,
-  },
-  methodIconDisabled: {
-    backgroundColor: Colors.dark.border,
   },
   methodIcon: {
     fontSize: 24,
@@ -954,25 +1036,9 @@ const styles = StyleSheet.create({
     color: Colors.dark.textSecondary,
     lineHeight: 18,
   },
-  methodTextDisabled: {
-    color: Colors.dark.textSecondary,
-  },
   methodArrow: {
     fontSize: FontSizes.xl,
     color: Colors.dark.tint,
-    fontWeight: '600',
-  },
-  comingSoonBadge: {
-    marginTop: 6,
-    backgroundColor: Colors.dark.border,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: BorderRadius.full,
-    alignSelf: 'flex-start',
-  },
-  comingSoonText: {
-    fontSize: FontSizes.xs,
-    color: Colors.dark.textSecondary,
     fontWeight: '600',
   },
 

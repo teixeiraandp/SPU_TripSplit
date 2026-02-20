@@ -1,6 +1,5 @@
 import { z } from "zod";
 import prisma from "../db.js";
-
 /**
  * Supports TWO payload shapes:
  *
@@ -21,6 +20,59 @@ import prisma from "../db.js";
  */
 
 // -------------------- Schemas --------------------
+// backend/src/controllers/expenseController.js
+
+// ... keep your existing createExpense and listExpenses functions ...
+export async function processReceiptOcr(req, res) {
+  try {
+    // If this is undefined => multer did not get your file
+    if (!req.file) {
+      return res.status(400).json({ message: "No text received", detail: "req.file missing" });
+    }
+
+    console.log("OCR upload:", {
+      fieldname: req.file.fieldname,
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+    });
+
+    // For now just confirm it arrived
+    return res.json({ ok: true, received: true, bytes: req.file.size });
+  } catch (err) {
+    console.error("OCR error:", err);
+    return res.status(500).json({ message: "OCR failed", error: String(err) });
+  }
+}
+
+
+export const getPendingPayments = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // This finds payments where the user is either the sender or receiver 
+    // and the status isn't 'completed' yet.
+    const pending = await prisma.payment.findMany({
+      where: {
+        OR: [
+          { fromUserId: userId },
+          { toUserId: userId }
+        ],
+        status: "PENDING" 
+      },
+      include: {
+        fromUser: { select: { username: true } },
+        toUser: { select: { username: true } },
+        trip: { select: { name: true } }
+      }
+    });
+
+    res.json(pending);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch pending payments" });
+  }
+};
+
 
 const splitPayloadSchema = z.object({
   title: z.string().min(1),

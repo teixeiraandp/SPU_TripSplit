@@ -1,13 +1,15 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/authMiddleware.js";
-import { createExpense, listExpenses } from "../controllers/expenseController.js";
+import { 
+  createExpense, 
+  listExpenses, 
+  getPendingPayments 
+} from "../controllers/expenseController.js";
 
 const router = Router();
-
 router.use(requireAuth);
 
-// Trip expenses
-router.post("/trips/:tripId/expenses", createExpense);
-router.get("/trips/:tripId/expenses", listExpenses);
+router.get("/pending", getPendingPayments); // This fixes the 404 /payments/pending
+
 
 export default router;
